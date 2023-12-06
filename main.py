@@ -1,10 +1,12 @@
 import numpy as np
 from pathlib import Path
 import os
+from time import sleep
 
 import torch
 from torch import nn
 import torch.nn.functional as F
+
 
 def get_device():
     device = "cpu"
@@ -22,6 +24,7 @@ POOL_SIZE = 1024
 LEARNING_RATE = 1e-3
 EPOCH_NUM = 500
 
+###### Utility Functions ######
 def load_text(file_path):
     file_path = str(file_path)
     with open(file_path, "r", encoding='utf-8') as input_text:
@@ -68,7 +71,11 @@ def init_text(text_size, channel_size=CHANNEL_SIZE):
     init_ntext = F.pad(init_ntext, (1,1), "constant", 0)
     return init_ntext
 
+def get_loss(X, target_ntext):
+    return ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1, 2])
 
+###### Model Construction #####
+#FIXME: the model structure need to be checked
 class CANN(nn.Module):
     def __init__(self, channel_num, cell_survival_rate, device=device):
         super().__init__()
@@ -134,10 +141,6 @@ class CANN(nn.Module):
         return X * live_mask
 
 
-# Utility Functions
-def get_loss(X, target_ntext):
-    return ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1, 2])
-
 def train_step(model, optimizer, pool_grid, target_ntext, text_length):
     batch_ids = torch.multinomial(torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False).to(device)
     batch_sample = pool_grid[batch_ids]
@@ -161,41 +164,36 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length):
     return batch_sample, pool_grid, loss
 
 def main():
+    # loading input data and construct maps
     input_path = Path("./data/input01.txt")
     text, text_length = load_text(input_path)
     ston, ntos = create_charmap(text)
     encode = lambda s: [float(ston[c])/(len(ston) - 1) for c in s] # encoder: take a string, output a list of integers
     decode = lambda l: ''.join([ntos[round(i * (len(ntos) - 1))] for i in l]) # decoder: take a list of integers, output a string
-    print(ston)
 
+    # Construct target 
     target_ntext = torch.tensor(encode(text))[None, ...]
     target_ntext = F.pad(target_ntext, (1,1), "constant", 0)
     target_ntext = torch.concat((target_ntext, torch.ones_like(target_ntext)), dim=0).to(device)
 
     # to show that decode function works
     target_stext = decode(target_ntext[0,:].squeeze().tolist())
-    print("############## The Original Text is #################")
-    print(target_stext)
 
+    # construct pool sample with poolsize of 1024
     init_ntext = init_text(text_size=len(text)).to(device)
     pool_grid = init_ntext.clone().repeat(POOL_SIZE, 1, 1)
 
-    # ensure that the string starts with "<space>."
+    # visualize the inital state, ensuring that the string starts with "<space>."
     init_stext = decode(init_ntext[0, 0, :].squeeze().tolist())
-    print("################ The Inital Text is #################")
-    print(init_stext)
-
-    init_loss = get_loss(init_ntext, target_ntext)
-    print(init_loss.item())
 
     model = CANN(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    X = model(init_ntext)
-    print(X.shape)
-
     log_file_path = Path(f"./data/log_{input_path.stem}.txt")
     log_file = open(log_file_path, "w")
+
+    print("\n ################\n please check the parameters above...")
+    sleep(4)
 
     try: 
         for epoch in range(EPOCH_NUM):
@@ -204,25 +202,34 @@ def main():
                             pool_grid,
                             target_ntext,
                             text_length)
-            if epoch % 1 == 0:
-                #os.system('clear')
-                epoch_sign = f"=====EPOCH {epoch}====="
+
+            epoch_sign = f"=====EPOCH {epoch}====="
+            result = ""
+            for sample in batch_sample[:, 0, :]:
+                result_text = decode(torch.clamp(sample, 0, 1).squeeze().tolist())
+                result += (result_text+"\n")
+
+            log_file.write(epoch_sign+"\n")
+            log_file.write(result)
+
+            if epoch % 10 == 0:
+                os.system('clear')
+                print("############## The Original Text is #################")
+                print(target_stext)
+                print("################ The Inital Text is #################")
+                print(init_stext)
                 print(epoch_sign)
                 print("loss: ", loss.item())
+                print(result)
 
-                log_file.write(epoch_sign+"\n")
+    except KeyboardInterrupt:
+        pass
 
-                for sample in batch_sample[:, 0, :]:
-                    result = decode(torch.clamp(sample, 0, 1).squeeze().tolist())
-                    log_file.write(result+"\n")
-                    print(result)
-
-    except KeyboardInterrupt: 
+    finally: 
         log_file.close()
 
-        print("log file saved...")
-        
-        weight_path = f"data/weights/{input_path.stem}.pt"
+        print(f"\nlog file saved to {log_file_path}...")
+        weight_path = Path(f"data/weights/{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
 
