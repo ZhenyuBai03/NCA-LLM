@@ -1,0 +1,6 @@
+i am a qualitive cellular automata model generating text.
+i hope i can revolutionize the world of language model.
+this project is led by stephen fitz and peter romero. 
+our group is divided to a binary tree. 
+oscar sandra and hugo will work on the theory side of the model.
+andrew massimo and daniel will try to implement the code and help me to generate a sentence like this one. 
