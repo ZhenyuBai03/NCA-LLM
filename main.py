@@ -5,6 +5,7 @@ import os
 import torch
 from torch import nn
 import torch.nn.functional as F
+from torch.utils.tensorboard import SummaryWriter
 
 
 def get_device():
@@ -16,12 +17,13 @@ def get_device():
 device = get_device()
 
 ### Constant ###
-BATCH_SIZE = 8
+BATCH_SIZE = 4
 CHANNEL_SIZE = 16
-CELL_SURVIVAL_RATE = 0.1
+CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 100
-LEARNING_RATE = 0.002
-EPOCH_NUM = 500
+LEARNING_RATE = 0.0001
+EPOCH_NUM = 9000
+input_path = Path("./data/input02.txt")
 
 ###### Utility Functions ######
 def load_text(file_path):
@@ -41,7 +43,6 @@ def create_charmap(text):
     ntos: map, nums to String
     """
     chars = sorted(list(set(text)))
-    chars.append(chars.pop(chars.index(".")))
     char_size = len(chars)
 
     #NOTE: might be used in the future
@@ -55,7 +56,10 @@ def create_charmap(text):
     # create mapping for "<space> \n zyxwvutsrqponmlkjihgfedcba." to integers
     ston = { ch:i for i,ch in enumerate(chars) }
     ntos = { i:ch for i,ch in enumerate(chars) }
-    return ston, ntos
+
+    encode = lambda s: [float(ston[c])/(len(ston) - 1) for c in s] # encoder: take a string, output a list of integers
+    decode = lambda l: ''.join([ntos[round(i * (len(ntos) - 1))] for i in l]) # decoder: take a list of integers, output a string
+    return ston, ntos, encode, decode
 
 def init_text(text_size, channel_size=CHANNEL_SIZE):
     """
@@ -66,8 +70,8 @@ def init_text(text_size, channel_size=CHANNEL_SIZE):
         init_ntext: pytorch.tensor with shape(1, channel_size, text_size)
     """
     init_ntext = torch.zeros((1, channel_size, text_size))
-    init_ntext[:, :, 0] = 1
-    init_ntext = F.pad(init_ntext, (1,1), "constant", 0)
+    init_ntext[:, :, text_size//2] = 1
+    init_ntext[:, 1:2, :] = 1
     return init_ntext
 
 def get_loss(X, target_ntext):
@@ -96,6 +100,7 @@ class CANN(nn.Module):
                     groups=1,
                     bias=False),
         )
+        self.count = 0
 
         # initialize weights to zero to prevent random noise
         with torch.no_grad():
@@ -105,8 +110,8 @@ class CANN(nn.Module):
         mask = (torch.rand(X[:, :1, :].shape) <= self.cell_survival_rate).to(self.device, torch.float32)
         return X * mask
 
-    def live_cell_mask(self, X, alpha_threshold=0.1):
-        live_mask = X[..., 1:2] > alpha_threshold
+    def live_cell_mask(self, X, alive_threshold=0.02):
+        live_mask = X[...,1:2, :] > alive_threshold
         return (live_mask)
 
     def neighbor_vector(self, X, neighbor_len=1):
@@ -121,7 +126,8 @@ class CANN(nn.Module):
         return: 
             perceived: torch.tensor with the shape same as input 
         """
-        filter = torch.arange(-neighbor_len, neighbor_len+1)[None, ...] / (neighbor_len*2)
+        filter = torch.tensor([1, 0, 1]) / 2
+        #filter = torch.arange(-neighbor_len, neighbor_len+1)[None, ...] / (neighbor_len*2)
         filter = filter.repeat((self.channel_num, 1)).unsqueeze(1).to(device)
         perceived = F.conv1d(X, filter, padding=neighbor_len, groups=self.channel_num)
         return perceived
@@ -140,7 +146,7 @@ class CANN(nn.Module):
         return X * live_mask
 
 
-def train_step(model, optimizer, pool_grid, target_ntext, text_length):
+def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, epoch):
     batch_ids = torch.multinomial(torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False).to(device)
     batch_sample = pool_grid[batch_ids]
     loss_rank = get_loss(batch_sample, target_ntext).argsort().flip(dims=(0,))
@@ -149,7 +155,7 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length):
     batch_ids = batch_ids[loss_rank]
     batch_sample[0] = init_text(text_size=text_length)
 
-    for _ in range(np.random.randint(64, 96)):
+    for _ in range(np.random.randint(40, 50)):
         batch_sample = model(batch_sample)
 
     loss = get_loss(batch_sample, target_ntext).mean()
@@ -160,21 +166,18 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length):
     loss.backward()
     optimizer.step()
 
+    writer.add_scalar("train/loss", loss, epoch)
     return batch_sample, pool_grid, loss
 
 def main():
     # loading input data and construct maps
-    input_path = Path("./data/input01.txt")
     text, text_length = load_text(input_path)
-    ston, ntos = create_charmap(text)
-    encode = lambda s: [float(ston[c])/(len(ston) - 1) for c in s] # encoder: take a string, output a list of integers
-    decode = lambda l: ''.join([ntos[round(i * (len(ntos) - 1))] for i in l]) # decoder: take a list of integers, output a string
+    ston, ntos, encode, decode  = create_charmap(text)
 
     print("the charmap is:\n", ston)
 
     # Construct target 
     target_ntext = torch.tensor(encode(text))[None, ...]
-    target_ntext = F.pad(target_ntext, (1,1), "constant", 0)
     target_ntext = torch.concat((target_ntext, torch.ones_like(target_ntext)), dim=0).to(device)
 
     # to show that decode function works
@@ -188,6 +191,9 @@ def main():
 
     # visualize the inital state, ensuring that the string starts with "<space>."
     init_stext = decode(init_ntext[0, 0, :].squeeze().tolist())
+    print("############## The Inital Text is #################")
+    print(init_ntext)
+    print(init_stext)
 
     model = CANN(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -195,15 +201,22 @@ def main():
     log_file_path = Path(f"./data/log_{input_path.stem}.txt")
     log_file = open(log_file_path, "w")
 
-    user_input = input("\n ################\n please check the parameters above and press enter...")
+    # LOGGING FILES
+    log_path = Path("logs")
+    log_path.mkdir(parents=True, exist_ok=True)
+    writer = SummaryWriter(log_path)
+
+    input("\n ################\n please check the parameters above and press enter...")
 
     try: 
         for epoch in range(EPOCH_NUM):
             batch_sample, pool_grid, loss = train_step(model,
-                            optimizer,
-                            pool_grid,
-                            target_ntext,
-                            text_length)
+                                                       optimizer,
+                                                       pool_grid,
+                                                       target_ntext,
+                                                       text_length,
+                                                       writer,
+                                                       epoch)
 
             epoch_sign = f"=====EPOCH {epoch}====="
             result = ""
@@ -229,6 +242,7 @@ def main():
 
     finally: 
         log_file.close()
+        writer.close()
 
         print(f"\nlog file saved to {log_file_path}...")
         weight_path = Path(f"data/weights/{input_path.stem}.pt")

@@ -2,3 +2,5 @@
 
 data/log_*.txt
 data/weights/
+
+logs/
