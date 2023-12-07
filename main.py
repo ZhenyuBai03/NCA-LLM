@@ -178,6 +178,8 @@ def main():
 
     # to show that decode function works
     target_stext = decode(target_ntext[0,:].squeeze().tolist())
+    print("############## The Original Text is #################")
+    print(target_stext)
 
     # construct pool sample with poolsize of 1024
     init_ntext = init_text(text_size=len(text)).to(device)
@@ -192,8 +194,7 @@ def main():
     log_file_path = Path(f"./data/log_{input_path.stem}.txt")
     log_file = open(log_file_path, "w")
 
-    print("\n ################\n please check the parameters above...")
-    sleep(4)
+    user_input = input("\n ################\n please check the parameters above and press enter...")
 
     try: 
         for epoch in range(EPOCH_NUM):
