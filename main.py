@@ -1,7 +1,6 @@
 import numpy as np
 from pathlib import Path
 import os
-from time import sleep
 
 import torch
 from torch import nn
@@ -20,8 +19,8 @@ device = get_device()
 BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.1
-POOL_SIZE = 1024
-LEARNING_RATE = 1e-3
+POOL_SIZE = 100
+LEARNING_RATE = 0.002
 EPOCH_NUM = 500
 
 ###### Utility Functions ######
@@ -171,6 +170,8 @@ def main():
     encode = lambda s: [float(ston[c])/(len(ston) - 1) for c in s] # encoder: take a string, output a list of integers
     decode = lambda l: ''.join([ntos[round(i * (len(ntos) - 1))] for i in l]) # decoder: take a list of integers, output a string
 
+    print("the charmap is:\n", ston)
+
     # Construct target 
     target_ntext = torch.tensor(encode(text))[None, ...]
     target_ntext = F.pad(target_ntext, (1,1), "constant", 0)
@@ -213,7 +214,7 @@ def main():
             log_file.write(epoch_sign+"\n")
             log_file.write(result)
 
-            if epoch % 10 == 0:
+            if epoch % 1 == 0:
                 os.system('clear')
                 print("############## The Original Text is #################")
                 print(target_stext)
