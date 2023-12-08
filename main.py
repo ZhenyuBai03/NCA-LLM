@@ -28,9 +28,9 @@ DEBUG = False
 BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
-POOL_SIZE = 500
+POOL_SIZE = 1024
 LEARNING_RATE = 0.001
-EPOCH_NUM = 5000
+EPOCH_NUM = 8000
 input_path = Path("./data/input01.txt")
 
 
@@ -230,7 +230,7 @@ def main():
     pwd = Path().resolve()
     if platform.system() == "Darwin":
         run(["rm", "-r", "logs/"])
-        op = Popen(
+        Popen(
             [
                 "/usr/bin/osascript",
                 "-e",
