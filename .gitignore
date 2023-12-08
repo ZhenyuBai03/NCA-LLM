@@ -4,3 +4,4 @@ data/log_*.txt
 data/weights/
 
 logs/
+loss_plot/

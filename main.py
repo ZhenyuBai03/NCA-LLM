@@ -1,6 +1,10 @@
 import numpy as np
 from pathlib import Path
+
 import os
+from subprocess import call, Popen, run
+import platform
+import signal
 
 import torch
 from torch import nn
@@ -17,13 +21,13 @@ def get_device():
 device = get_device()
 
 ### Constant ###
-BATCH_SIZE = 4
+BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
-POOL_SIZE = 100
+POOL_SIZE = 500
 LEARNING_RATE = 0.0001
-EPOCH_NUM = 9000
-input_path = Path("./data/input02.txt")
+EPOCH_NUM = 5000
+input_path = Path("./data/input01.txt")
 
 ###### Utility Functions ######
 def load_text(file_path):
@@ -70,12 +74,13 @@ def init_text(text_size, channel_size=CHANNEL_SIZE):
         init_ntext: pytorch.tensor with shape(1, channel_size, text_size)
     """
     init_ntext = torch.zeros((1, channel_size, text_size))
-    init_ntext[:, :, text_size//2] = 1
-    init_ntext[:, 1:2, :] = 1
+    init_ntext[:, :, 0] = 1
+    #init_ntext[:, 1:2, :] = 1
     return init_ntext
 
 def get_loss(X, target_ntext):
-    return ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1, 2])
+    loss = ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1,2])
+    return loss
 
 ###### Model Construction #####
 #FIXME: the model structure need to be checked
@@ -87,20 +92,15 @@ class CANN(nn.Module):
         self.device = device
 
         self.seq = nn.Sequential(
-            nn.Conv1d(in_channels=channel_num, 
-                    out_channels=128, 
-                    kernel_size=3, 
-                    padding=1, 
-                    groups=1),
+            nn.Conv1d(in_channels=channel_num*2, 
+                      out_channels=128, 
+                      kernel_size=1,),
             nn.ReLU(),
             nn.Conv1d(in_channels=128, 
-                    out_channels=channel_num, 
-                    kernel_size=3, 
-                    padding=1, 
-                    groups=1,
-                    bias=False),
+                      out_channels=channel_num, 
+                      kernel_size=1, 
+                      bias=False),
         )
-        self.count = 0
 
         # initialize weights to zero to prevent random noise
         with torch.no_grad():
@@ -110,26 +110,20 @@ class CANN(nn.Module):
         mask = (torch.rand(X[:, :1, :].shape) <= self.cell_survival_rate).to(self.device, torch.float32)
         return X * mask
 
-    def live_cell_mask(self, X, alive_threshold=0.02):
-        live_mask = X[...,1:2, :] > alive_threshold
-        return (live_mask)
+    def live_cell_mask(self, X, alive_threshold=0.1):
+        val = F.max_pool1d(X[:, 1:2, ...], kernel_size=3, stride=1, padding=1) > alive_threshold
+        return val
 
-    def neighbor_vector(self, X, neighbor_len=1):
+    def neighbor_vector(self, X):
         """
-        Currently, the percieved vector is only defined as [-1, 0, 1] to
-        apply convolution on the neighbor 
-        Args:
-            X, torch.tensor with shape of (BATCH_SIZE, CHANNEL_SIZE, CHAR_NUM)
-            neighbor_len: in case we want to increase the size of neighbor, the argument is added
-                          if neighbor_len=2, then the filter tensor would be [-2, -1, 0, 1, 2]
-
         return: 
             perceived: torch.tensor with the shape same as input 
         """
-        filter = torch.tensor([1, 0, 1]) / 2
-        #filter = torch.arange(-neighbor_len, neighbor_len+1)[None, ...] / (neighbor_len*2)
+        filter0 = torch.tensor([-1, 0, 1]) / 2
+        filter1 = torch.tensor([0, 1, 0]) / 2
+        filter = torch.stack([filter0, filter1])
         filter = filter.repeat((self.channel_num, 1)).unsqueeze(1).to(device)
-        perceived = F.conv1d(X, filter, padding=neighbor_len, groups=self.channel_num)
+        perceived = F.conv1d(X, filter, padding=1, groups=self.channel_num)
         return perceived
 
     def forward(self, X):
@@ -192,8 +186,8 @@ def main():
     # visualize the inital state, ensuring that the string starts with "<space>."
     init_stext = decode(init_ntext[0, 0, :].squeeze().tolist())
     print("############## The Inital Text is #################")
-    print(init_ntext)
     print(init_stext)
+    print(init_ntext)
 
     model = CANN(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -201,8 +195,13 @@ def main():
     log_file_path = Path(f"./data/log_{input_path.stem}.txt")
     log_file = open(log_file_path, "w")
 
-    # LOGGING FILES
+    # LOGGING FILES for tensorboard
     log_path = Path("logs")
+    pwd = Path().resolve()
+    if platform.system() == 'Darwin':
+        run(["rm", "-r", "logs/"])
+        op = Popen(["/usr/bin/osascript", "-e", f'tell app "Terminal" to do script "cd {pwd} &&  python3 -m tensorboard.main --logdir=logs"'])
+
     log_path.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_path)
 
@@ -229,6 +228,7 @@ def main():
 
             if epoch % 1 == 0:
                 os.system('clear')
+                print(ston)
                 print("############## The Original Text is #################")
                 print(target_stext)
                 print("################ The Inital Text is #################")
@@ -236,6 +236,9 @@ def main():
                 print(epoch_sign)
                 print("loss: ", loss.item())
                 print(result)
+
+            if epoch == 200 and platform.system()=='Darwin':
+                run(["open", "-a", "Safari", "http://localhost:6006/?darkMode=true#timeseries"])
 
     except KeyboardInterrupt:
         pass
