@@ -2,9 +2,8 @@ import numpy as np
 from pathlib import Path
 
 import os
-from subprocess import call, Popen, run
+from subprocess import Popen, run
 import platform
-import signal
 
 import torch
 from torch import nn
@@ -82,8 +81,7 @@ def init_text(text_size, channel_size=CHANNEL_SIZE):
         init_ntext: pytorch.tensor with shape(1, channel_size, text_size)
     """
     init_ntext = torch.zeros((1, channel_size, text_size))
-    init_ntext[:, :, 0] = 1
-    # init_ntext[:, 1:2, :] = 1
+    init_ntext[:, 1:, 0] = 1
     return init_ntext
 
 
@@ -187,7 +185,7 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
 
 def main():
     # loading input data and construct maps
-    input_path = Path("./data/input01.txt")
+    input_path = Path("./data/input02.txt")
     text, text_length = load_text(input_path)
     ston, _, encode, decode = create_charmap(text)
 
