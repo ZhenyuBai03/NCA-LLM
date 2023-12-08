@@ -18,73 +18,85 @@ def get_device():
     device = torch.device("cuda") if torch.cuda.is_available() else device
     print(f"Using device: {device}")
     return device
+
+
 device = get_device()
+
+DEBUG = False
 
 ### Constant ###
 BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.001
 EPOCH_NUM = 5000
 input_path = Path("./data/input01.txt")
+
 
 ###### Utility Functions ######
 def load_text(file_path):
     file_path = str(file_path)
-    with open(file_path, "r", encoding='utf-8') as input_text:
+    with open(file_path, "r", encoding="utf-8") as input_text:
         text = input_text.read()
     text_length = len(text)
     print("the length of the text is:", text_length)
     return text, text_length
 
+
 def create_charmap(text):
     """
     Currently, we only want to make sure the first character is "<space>" and the last one is "."
 
-    return: 
+    return:
     ston: map, String to nums
     ntos: map, nums to String
     """
     chars = sorted(list(set(text)))
     char_size = len(chars)
 
-    #NOTE: might be used in the future
-    #for i in range(chars.index(".")):
+    # NOTE: might be used in the future
+    # for i in range(chars.index(".")):
     #    chars.append(chars.pop(0))
-    #chars = chars[::-1] 
+    # chars = chars[::-1]
 
-    print(f'there are {char_size} characters')
-    print(''.join(chars))
+    print(f"characters[{char_size}]: [{''.join(chars)}]")
 
     # create mapping for "<space> \n zyxwvutsrqponmlkjihgfedcba." to integers
-    ston = { ch:i for i,ch in enumerate(chars) }
-    ntos = { i:ch for i,ch in enumerate(chars) }
+    ston = {ch: i for i, ch in enumerate(chars)}
+    ntos = {i: ch for i, ch in enumerate(chars)}
 
-    encode = lambda s: [float(ston[c])/(len(ston) - 1) for c in s] # encoder: take a string, output a list of integers
-    decode = lambda l: ''.join([ntos[round(i * (len(ntos) - 1))] for i in l]) # decoder: take a list of integers, output a string
+    encode = lambda s: [
+        float(ston[c]) / (len(ston) - 1) for c in s
+    ]  # encoder: take a string, output a list of integers
+    decode = lambda l: "".join(
+        [ntos[round(i * (len(ntos) - 1))] for i in l]
+    )  # decoder: take a list of integers, output a string
     return ston, ntos, encode, decode
+
 
 def init_text(text_size, channel_size=CHANNEL_SIZE):
     """
     The first character and its hidden states іs assigned as 1, which corresponds to "."
     The rest of characters are all zeros.
-    
-    return: 
+
+    return:
         init_ntext: pytorch.tensor with shape(1, channel_size, text_size)
     """
     init_ntext = torch.zeros((1, channel_size, text_size))
     init_ntext[:, :, 0] = 1
-    #init_ntext[:, 1:2, :] = 1
+    # init_ntext[:, 1:2, :] = 1
     return init_ntext
 
+
 def get_loss(X, target_ntext):
-    loss = ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1,2])
+    loss = ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1, 2])
     return loss
 
+
 ###### Model Construction #####
-#FIXME: the model structure need to be checked
-class CANN(nn.Module):
+# FIXME: the model structure need to be checked
+class NCA_LLM(nn.Module):
     def __init__(self, channel_num, cell_survival_rate, device=device):
         super().__init__()
         self.channel_num = channel_num
@@ -92,14 +104,15 @@ class CANN(nn.Module):
         self.device = device
 
         self.seq = nn.Sequential(
-            nn.Conv1d(in_channels=channel_num*2, 
-                      out_channels=128, 
-                      kernel_size=1,),
+            nn.Conv1d(
+                in_channels=channel_num * 2,
+                out_channels=128,
+                kernel_size=1,
+            ),
             nn.ReLU(),
-            nn.Conv1d(in_channels=128, 
-                      out_channels=channel_num, 
-                      kernel_size=1, 
-                      bias=False),
+            nn.Conv1d(
+                in_channels=128, out_channels=channel_num, kernel_size=1, bias=False
+            ),
         )
 
         # initialize weights to zero to prevent random noise
@@ -107,22 +120,30 @@ class CANN(nn.Module):
             self.seq[2].weight.zero_()
 
     def stochastic_update(self, X):
-        mask = (torch.rand(X[:, :1, :].shape) <= self.cell_survival_rate).to(self.device, torch.float32)
+        mask = (torch.rand(X[:, :1, :].shape) <= self.cell_survival_rate).to(
+            self.device, torch.float32
+        )
         return X * mask
 
     def live_cell_mask(self, X, alive_threshold=0.1):
-        val = F.max_pool1d(X[:, 1:2, ...], kernel_size=3, stride=1, padding=1) > alive_threshold
+        val = (
+            F.max_pool1d(X[:, 1:2, ...], kernel_size=3, stride=1, padding=1)
+            > alive_threshold
+        )
         return val
 
     def neighbor_vector(self, X):
         """
-        return: 
-            perceived: torch.tensor with the shape same as input 
+        return:
+            perceived: torch.tensor with the shape same as input
         """
-        filter0 = torch.tensor([-1, 0, 1]) / 2
-        filter1 = torch.tensor([0, 1, 0]) / 2
-        filter = torch.stack([filter0, filter1])
+        scalar = 2
+        surrounding = torch.tensor([-1, 0, 1]) / scalar
+        identity = torch.tensor([0, 1, 0]) / scalar
+
+        filter = torch.stack([surrounding, identity])
         filter = filter.repeat((self.channel_num, 1)).unsqueeze(1).to(device)
+
         perceived = F.conv1d(X, filter, padding=1, groups=self.channel_num)
         return perceived
 
@@ -141,7 +162,9 @@ class CANN(nn.Module):
 
 
 def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, epoch):
-    batch_ids = torch.multinomial(torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False).to(device)
+    batch_ids = torch.multinomial(
+        torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False
+    ).to(device)
     batch_sample = pool_grid[batch_ids]
     loss_rank = get_loss(batch_sample, target_ntext).argsort().flip(dims=(0,))
 
@@ -149,7 +172,7 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
     batch_ids = batch_ids[loss_rank]
     batch_sample[0] = init_text(text_size=text_length)
 
-    for _ in range(np.random.randint(40, 50)):
+    for _ in range(np.random.randint(48, 96)):
         batch_sample = model(batch_sample)
 
     loss = get_loss(batch_sample, target_ntext).mean()
@@ -163,19 +186,23 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
     writer.add_scalar("train/loss", loss, epoch)
     return batch_sample, pool_grid, loss
 
+
 def main():
     # loading input data and construct maps
     text, text_length = load_text(input_path)
-    ston, ntos, encode, decode  = create_charmap(text)
+    ston, ntos, encode, decode = create_charmap(text)
 
-    print("the charmap is:\n", ston)
+    if DEBUG:
+        print("the charmap is:\n", ston)
 
-    # Construct target 
+    # Construct target
     target_ntext = torch.tensor(encode(text))[None, ...]
-    target_ntext = torch.concat((target_ntext, torch.ones_like(target_ntext)), dim=0).to(device)
+    target_ntext = torch.concat(
+        (target_ntext, torch.ones_like(target_ntext)), dim=0
+    ).to(device)
 
     # to show that decode function works
-    target_stext = decode(target_ntext[0,:].squeeze().tolist())
+    target_stext = decode(target_ntext[0, :].squeeze().tolist())
     print("############## The Original Text is #################")
     print(target_stext)
 
@@ -187,9 +214,12 @@ def main():
     init_stext = decode(init_ntext[0, 0, :].squeeze().tolist())
     print("############## The Inital Text is #################")
     print(init_stext)
-    print(init_ntext)
+    if DEBUG:
+        print(init_ntext)
 
-    model = CANN(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
+    model = NCA_LLM(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(
+        device
+    )
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     log_file_path = Path(f"./data/log_{input_path.stem}.txt")
@@ -198,52 +228,63 @@ def main():
     # LOGGING FILES for tensorboard
     log_path = Path("logs")
     pwd = Path().resolve()
-    if platform.system() == 'Darwin':
+    if platform.system() == "Darwin":
         run(["rm", "-r", "logs/"])
-        op = Popen(["/usr/bin/osascript", "-e", f'tell app "Terminal" to do script "cd {pwd} &&  python3 -m tensorboard.main --logdir=logs"'])
+        op = Popen(
+            [
+                "/usr/bin/osascript",
+                "-e",
+                f'tell app "Terminal" to do script "cd {pwd} &&  python3 -m tensorboard.main --logdir=logs"',
+            ]
+        )
 
     log_path.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_path)
 
-    input("\n ################\n please check the parameters above and press enter...")
+    print("\n####################################################")
+    input("please check the parameters above and press enter...\n")
 
-    try: 
+    try:
         for epoch in range(EPOCH_NUM):
-            batch_sample, pool_grid, loss = train_step(model,
-                                                       optimizer,
-                                                       pool_grid,
-                                                       target_ntext,
-                                                       text_length,
-                                                       writer,
-                                                       epoch)
+            batch_sample, pool_grid, loss = train_step(
+                model, optimizer, pool_grid, target_ntext, text_length, writer, epoch
+            )
 
-            epoch_sign = f"=====EPOCH {epoch}====="
+            epoch_sign = f"===== EPOCH {epoch} ====="
             result = ""
             for sample in batch_sample[:, 0, :]:
                 result_text = decode(torch.clamp(sample, 0, 1).squeeze().tolist())
-                result += (result_text+"\n")
+                result += result_text + "\n"
 
-            log_file.write(epoch_sign+"\n")
+            log_file.write(epoch_sign + "\n")
             log_file.write(result)
 
             if epoch % 1 == 0:
-                os.system('clear')
-                print(ston)
+                os.system("clear")
+                if DEBUG:
+                    print(ston)
                 print("############## The Original Text is #################")
                 print(target_stext)
-                print("################ The Inital Text is #################")
+                print("##############  The Inital Text is  #################")
                 print(init_stext)
                 print(epoch_sign)
                 print("loss: ", loss.item())
                 print(result)
 
-            if epoch == 200 and platform.system()=='Darwin':
-                run(["open", "-a", "Safari", "http://localhost:6006/?darkMode=true#timeseries"])
+            if epoch == 200 and platform.system() == "Darwin":
+                run(
+                    [
+                        "open",
+                        "-a",
+                        "Safari",
+                        "http://localhost:6006/?darkMode=true#timeseries",
+                    ]
+                )
 
     except KeyboardInterrupt:
         pass
 
-    finally: 
+    finally:
         log_file.close()
         writer.close()
 
@@ -251,6 +292,7 @@ def main():
         weight_path = Path(f"data/weights/{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
+
 
 if __name__ == "__main__":
     main()

@@ -36,7 +36,7 @@ def main():
     weight_path = Path(f'./data/weights/{text_path.stem}.pt')
 
     # load model
-    model = ca.CANN(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
+    model = ca.NCA_LLM(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
     model.load_state_dict(torch.load(weight_path))
     model.eval()
 
