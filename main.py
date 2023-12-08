@@ -26,8 +26,8 @@ CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
-EPOCH_NUM = 5000
-input_path = Path("./data/input01.txt")
+EPOCH_NUM = 8000
+input_path = Path("./data/input02.txt")
 
 ###### Utility Functions ######
 def load_text(file_path):
@@ -74,8 +74,7 @@ def init_text(text_size, channel_size=CHANNEL_SIZE):
         init_ntext: pytorch.tensor with shape(1, channel_size, text_size)
     """
     init_ntext = torch.zeros((1, channel_size, text_size))
-    init_ntext[:, :, 0] = 1
-    #init_ntext[:, 1:2, :] = 1
+    init_ntext[:, 1:, 0] = 1
     return init_ntext
 
 def get_loss(X, target_ntext):
@@ -83,7 +82,6 @@ def get_loss(X, target_ntext):
     return loss
 
 ###### Model Construction #####
-#FIXME: the model structure need to be checked
 class CANN(nn.Module):
     def __init__(self, channel_num, cell_survival_rate, device=device):
         super().__init__()
@@ -149,7 +147,7 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
     batch_ids = batch_ids[loss_rank]
     batch_sample[0] = init_text(text_size=text_length)
 
-    for _ in range(np.random.randint(40, 50)):
+    for _ in range(np.random.randint(80, 96)):
         batch_sample = model(batch_sample)
 
     loss = get_loss(batch_sample, target_ntext).mean()
@@ -227,7 +225,7 @@ def main():
             log_file.write(result)
 
             if epoch % 1 == 0:
-                os.system('clear')
+                #os.system('clear')
                 print(ston)
                 print("############## The Original Text is #################")
                 print(target_stext)

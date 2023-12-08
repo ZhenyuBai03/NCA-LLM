@@ -15,7 +15,7 @@ CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 100
 LEARNING_RATE = 0.002
-EPOCH_NUM = 5000
+EPOCH_NUM = 500
 
 def main():
     parser = argparse.ArgumentParser(
