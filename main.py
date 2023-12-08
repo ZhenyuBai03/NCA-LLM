@@ -28,11 +28,9 @@ DEBUG = False
 BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
-POOL_SIZE = 500
+POOL_SIZE = 1024
 LEARNING_RATE = 0.001
-EPOCH_NUM = 5000
-input_path = Path("./data/input01.txt")
-
+EPOCH_NUM = 8000
 
 ###### Utility Functions ######
 def load_text(file_path):
@@ -189,8 +187,9 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
 
 def main():
     # loading input data and construct maps
+    input_path = Path("./data/input01.txt")
     text, text_length = load_text(input_path)
-    ston, ntos, encode, decode = create_charmap(text)
+    ston, _, encode, decode = create_charmap(text)
 
     if DEBUG:
         print("the charmap is:\n", ston)
@@ -230,7 +229,7 @@ def main():
     pwd = Path().resolve()
     if platform.system() == "Darwin":
         run(["rm", "-r", "logs/"])
-        op = Popen(
+        Popen(
             [
                 "/usr/bin/osascript",
                 "-e",
