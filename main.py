@@ -18,6 +18,11 @@ def get_device():
     print(f"Using device: {device}")
     return device
 
+# NEED TO USE AN EMBEDDING LAYER
+# LOSS CROSS ENTROPY
+# SOFTMAX
+# return set of probabilities for each character for each character
+# bag of words model for next week
 
 device = get_device()
 
@@ -41,6 +46,7 @@ def load_text(file_path):
     return text, text_length
 
 
+# FIXME: remove
 def create_charmap(text):
     """
     Currently, we only want to make sure the first character is "<space>" and the last one is "."
@@ -128,12 +134,15 @@ class NCA_LLM(nn.Module):
         )
         return val
 
+    # TODO: Use convolution in sequence
+    # (will use transformer later)
     def neighbor_vector(self, X):
         """
         return:
             perceived: torch.tensor with the shape same as input
         """
         scalar = 2
+        # NOTE: learn filter
         surrounding = torch.tensor([-1, 0, 1]) / scalar
         identity = torch.tensor([0, 1, 0]) / scalar
 
