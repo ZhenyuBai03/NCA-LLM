@@ -37,41 +37,19 @@ LEARNING_RATE = 0.0001
 EPOCH_NUM = 8000
 input_path = Path("./data/input02.txt")
 
-###### Utility Functions ######
-def load_text(file_path):
-    file_path = str(file_path)
-    with open(file_path, "r", encoding="utf-8") as input_text:
-        text = input_text.read()
-    text_length = len(text)
-    print("the length of the text is:", text_length)
-    return text, text_length
+file_path = str(input_path)
+with open(file_path, "r", encoding="utf-8") as input_text:
+    text = input_text.read()
 
+TEXT_LEN= len(text)
 
-# FIXME: remove
-def create_charmap(text):
-    """
-    Currently, we only want to make sure the first character is "<space>" and the last one is "."
+chars = sorted(list(set(text)))
+CHAR_SIZE = len(chars)
 
-    return:
-    ston: map, String to nums
-    ntos: map, nums to String
-    """
-    chars = sorted(list(set(text)))
-    char_size = len(chars)
-
-    print(f"characters[{char_size}]: [{''.join(chars)}]")
-
-    ston = {ch: i for i, ch in enumerate(chars)}
-    ntos = {i: ch for i, ch in enumerate(chars)}
-
-    encode = lambda s: [
-        float(ston[c]) / (len(ston) - 1) for c in s
-    ]  # encoder: take a string, output a list of integers
-    decode = lambda l: "".join(
-        [ntos[round(i * (len(ntos) - 1))] for i in l]
-    )  # decoder: take a list of integers, output a string
-    return ston, ntos, encode, decode
-
+stoi = { ch:i for i,ch in enumerate(chars) }
+itos = { i:ch for i,ch in enumerate(chars) }
+encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
+decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
 
 def init_text(text_size, channel_size=CHANNEL_SIZE):
     """
@@ -86,28 +64,31 @@ def init_text(text_size, channel_size=CHANNEL_SIZE):
     return init_ntext
 
 
-def get_loss(X, target_ntext):
-    loss = ((target_ntext - X[:, :2, ...]) ** 2).mean(dim=[1, 2])
-    return loss
 
 
 ###### Model Construction #####
 class NCA_LLM(nn.Module):
     def __init__(self, channel_num, cell_survival_rate, device=device):
         super().__init__()
+        self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
         self.channel_num = channel_num
         self.cell_survival_rate = cell_survival_rate
         self.device = device
 
         self.seq = nn.Sequential(
             nn.Conv1d(
-                in_channels=channel_num * 2,
+                in_channels=CHAR_SIZE,
                 out_channels=128,
-                kernel_size=1,
+                kernel_size=3,
+                padding=1,
             ),
             nn.ReLU(),
             nn.Conv1d(
-                in_channels=128, out_channels=channel_num, kernel_size=1, bias=False
+                in_channels=128,
+                out_channels=CHAR_SIZE,
+                kernel_size=3,
+                padding=1,
+                bias=False
             ),
         )
 
@@ -121,51 +102,23 @@ class NCA_LLM(nn.Module):
         )
         return X * mask
 
-    def live_cell_mask(self, X, alive_threshold=0.1):
-        val = (
-            F.max_pool1d(X[:, 1:2, ...], kernel_size=3, stride=1, padding=1)
-            > alive_threshold
-        )
-        return val
-
-    # TODO: Use convolution in sequence
-    # (will use transformer later)
-    def neighbor_vector(self, X):
-        """
-        return:
-            perceived: torch.tensor with the shape same as input
-        """
-        scalar = 2
-        # NOTE: learn filter
-        surrounding = torch.tensor([-1, 0, 1]) / scalar
-        identity = torch.tensor([0, 1, 0]) / scalar
-
-        filter = torch.stack([surrounding, identity])
-        filter = filter.repeat((self.channel_num, 1)).unsqueeze(1).to(device)
-
-        perceived = F.conv1d(X, filter, padding=1, groups=self.channel_num)
-        return perceived
-
+    # XXX: Live cell mask deleted, 
+    # stochastic update disabled
+    
     def forward(self, X):
-        pre_mask = self.live_cell_mask(X)
-        y = self.neighbor_vector(X)
-        dx = self.seq(y)
-        dx = self.stochastic_update(dx)
-
-        X = X + dx
-
-        post_mask = self.live_cell_mask(X)
-        live_mask = (pre_mask & post_mask).to(torch.float32)
-
-        return X * live_mask
+        emb_x = self.token_embedding_table(X).permute(0, 2, 1) # (B, embd_dim=CHAR_SIZE, TEXT_LEN)
+        logits = self.seq(emb_x).permute(0, 2, 1) # (B, TEXT_LEN, CHAR_SIZE)
+        probs = F.softmax(logits, dim=-1) # (B, C)
+        return logits, probs.argmax(dim=-1)
 
 
-def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, epoch):
+
+def train_step(model, optimizer, pool_grid, targets, text_length, writer, epoch):
     batch_ids = torch.multinomial(
         torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False
     ).to(device)
     batch_sample = pool_grid[batch_ids]
-    loss_rank = get_loss(batch_sample, target_ntext).argsort().flip(dims=(0,))
+    loss_rank = get_loss(batch_sample, targets).argsort().flip(dims=(0,))
 
     batch_sample = batch_sample[loss_rank]
     batch_ids = batch_ids[loss_rank]
@@ -174,7 +127,7 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
     for _ in range(np.random.randint(80, 96)):
         batch_sample = model(batch_sample)
 
-    loss = get_loss(batch_sample, target_ntext).mean()
+    loss = get_loss(batch_sample, targets).mean()
 
     pool_grid[batch_ids] = batch_sample.detach()
 
@@ -185,41 +138,39 @@ def train_step(model, optimizer, pool_grid, target_ntext, text_length, writer, e
     writer.add_scalar("train/loss", loss, epoch)
     return batch_sample, pool_grid, loss
 
+def get_loss(logits, targets):
+    B, T, C = logits.shape
+    logits_flat =  logits.reshape(B * T, C) # Now shape is (8*13, 10)
+    targets_flat = targets.reshape(B * T)  # Now shape is (8*13)
+    # Calculate the loss
+    loss = F.cross_entropy(logits_flat, targets_flat, reduction='none') 
+    # Reshape the loss back to the batch shape (8, 13)
+    loss = loss.reshape(B, T)
+    loss = loss.mean(dim=-1)
+    return loss
 
 def main():
     # loading input data and construct maps
     input_path = Path("./data/input02.txt")
-    text, text_length = load_text(input_path)
-    ston, _, encode, decode = create_charmap(text)
-
-    if DEBUG:
-        print("the charmap is:\n", ston)
 
     # Construct target
-    target_ntext = torch.tensor(encode(text))[None, ...]
-    target_ntext = torch.concat(
-        (target_ntext, torch.ones_like(target_ntext)), dim=0
-    ).to(device)
+    targets = torch.tensor(encode(text), dtype=torch.long)[None, ...].to(device)
+    targets = targets.repeat(BATCH_SIZE, 1)
 
-    # to show that decode function works
-    target_stext = decode(target_ntext[0, :].squeeze().tolist())
-    print("############## The Original Text is #################")
-    print(target_stext)
 
     # construct pool sample with poolsize of 1024
-    init_ntext = init_text(text_size=len(text)).to(device)
-    pool_grid = init_ntext.clone().repeat(POOL_SIZE, 1, 1)
-
-    # visualize the inital state, ensuring that the string starts with "<space>."
-    init_stext = decode(init_ntext[0, 0, :].squeeze().tolist())
-    print("############## The Inital Text is #################")
-    print(init_stext)
-    if DEBUG:
-        print(init_ntext)
+    init_x = torch.zeros_like(targets).to(device)
+    #pool_grid = init_ntext.clone().repeat(POOL_SIZE, 1, 1)
 
     model = NCA_LLM(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(
         device
     )
+
+    logit, output = model(init_x)
+    loss = get_loss(logit, targets)
+    print(loss)
+    input()
+
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     log_file_path = Path(f"./data/log_{input_path.stem}.txt")
@@ -247,7 +198,7 @@ def main():
     try:
         for epoch in range(EPOCH_NUM):
             batch_sample, pool_grid, loss = train_step(
-                model, optimizer, pool_grid, target_ntext, text_length, writer, epoch
+                model, optimizer, pool_grid, targets, TEXT_LEN, writer, epoch
             )
 
             epoch_sign = f"===== EPOCH {epoch} ====="
@@ -261,8 +212,6 @@ def main():
 
             if epoch % 1 == 0:
                 os.system("clear")
-                if DEBUG:
-                    print(ston)
                 print("############## The Original Text is #################")
                 print(target_stext)
                 print("##############  The Inital Text is  #################")
@@ -289,6 +238,8 @@ def main():
         writer.close()
 
         print(f"\nlog file saved to {log_file_path}...")
+        weigh_path = Path("data/weights")
+        weigh_path.mkdir(parents=True, exist_ok=True)
         weight_path = Path(f"data/weights/{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
