@@ -6,10 +6,8 @@
   - decided to start from simple data: "aa bb cc"
   - fix the bug in live mask
   - test.py couldn't run properly due to the structure of the model
-
-## Model Summary
-1. Read text
-2. create character mapping
-  - [ ] try to just output the tensor 
-3. Text initialization
-  - How about starting the text from the middle? 
+* 2023.12.12
+  - the new NCA-LLM model could re-generate Shakespeare 
+    - implement embedding table on the model
+    - use con1d to learn neighbors' logit
+  - simplified transformer model tested
