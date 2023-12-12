@@ -16,7 +16,7 @@ CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
 EPOCH_NUM = 8000
-input_path = Path("./data/input02.txt")
+input_path = Path("./data/input03.txt")
 weight_path = Path(f'./data/weights/new_{input_path.stem}.pt')
 
 file_path = str(input_path)
@@ -42,12 +42,13 @@ def main():
     model.eval()
 
     with torch.no_grad():
-        for epoch in range(5):
-            print(f"epoch: {epoch}", decode(init_x[0].cpu().numpy()))
+        for epoch in range(30):
+            print(f"epoch: {epoch}")
+            #print(decode(init_x[0].cpu().numpy()))
             logit, init_x = model(init_x)
         output = init_x
 
-    print("Final Output: ", decode(output[0].cpu().numpy()))
+    print("Final Output: \n", decode(output[0].cpu().numpy()))
 
     
 

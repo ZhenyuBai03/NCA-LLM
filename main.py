@@ -34,8 +34,8 @@ CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
-EPOCH_NUM = 8000
-input_path = Path("./data/input02.txt")
+EPOCH_NUM = 1000
+input_path = Path("./data/input03.txt")
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
@@ -96,14 +96,13 @@ class NCA_LLM(nn.Module):
         with torch.no_grad():
             self.seq[2].weight.zero_()
 
+    # XXX: Live cell mask deleted, 
+    # stochastic update disabled
     def stochastic_update(self, X):
         mask = (torch.rand(X[:, :1, :].shape) <= self.cell_survival_rate).to(
             self.device, torch.float32
         )
         return X * mask
-
-    # XXX: Live cell mask deleted, 
-    # stochastic update disabled
     
     def forward(self, X):
         emb_x = self.token_embedding_table(X) #(B, T, C)
@@ -150,9 +149,6 @@ def get_loss(logits, targets):
     return loss
 
 def main():
-    # loading input data and construct maps
-    input_path = Path("./data/input02.txt")
-
     # Construct target
     targets = torch.tensor(encode(text), dtype=torch.long)[None, ...].to(device)
     targets = targets.repeat(BATCH_SIZE, 1)
@@ -170,16 +166,14 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    log_file_path = Path(f"./data/log_{input_path.stem}.txt")
-    log_file = open(log_file_path, "w")
-
     # LOGGING FILES for tensorboard
     log_path = Path("logs")
     pwd = Path().resolve()
 
+    macos_tb = None
     if platform.system() == "Darwin":
         run(["rm", "-r", "logs/"])
-        Popen(
+        macos_tb = Popen(
             [
                 "/usr/bin/osascript",
                 "-e",
@@ -210,7 +204,7 @@ def main():
             pool_grid[batch_ids] = batch_x.detach()
 
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
-            print(decode(batch_x[0].cpu().numpy()))
+            #print(decode(batch_x[0].cpu().numpy()))
 
 
             optimizer.zero_grad()
@@ -236,9 +230,21 @@ def main():
             logit, init_x = model(init_x)
         output = init_x
         print("Final Output: ", decode(output[0].cpu().numpy()))
+        print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)
         weight_path = Path(f"data/weights/new_{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
+
+        if macos_tb is not None:
+            terminate = input("Terminate Tensorboard? (y/n): ")
+            if terminate.lower() == "y":
+                Popen(
+                    [
+                        "/usr/bin/osascript",
+                        "-e",
+                        'tell app "Terminal" to quit'
+                    ]
+                )
 
 if __name__ == "__main__":
     main()
