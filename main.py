@@ -77,7 +77,7 @@ class NCA_LLM(nn.Module):
 
         self.seq = nn.Sequential(
             nn.Conv1d(
-                in_channels=CHAR_SIZE,
+                in_channels=TEXT_LEN,
                 out_channels=128,
                 kernel_size=3,
                 padding=1,
@@ -85,7 +85,7 @@ class NCA_LLM(nn.Module):
             nn.ReLU(),
             nn.Conv1d(
                 in_channels=128,
-                out_channels=CHAR_SIZE,
+                out_channels=TEXT_LEN,
                 kernel_size=3,
                 padding=1,
                 bias=False
@@ -106,8 +106,8 @@ class NCA_LLM(nn.Module):
     # stochastic update disabled
     
     def forward(self, X):
-        emb_x = self.token_embedding_table(X).permute(0, 2, 1) # (B, embd_dim=CHAR_SIZE, TEXT_LEN)
-        logits = self.seq(emb_x).permute(0, 2, 1) # (B, TEXT_LEN, CHAR_SIZE)
+        emb_x = self.token_embedding_table(X) #(B, T, C)
+        logits = self.seq(emb_x) #(B, T, C)
         probs = F.softmax(logits, dim=-1) # (B, C)
         return logits, probs.argmax(dim=-1)
 
@@ -159,17 +159,14 @@ def main():
 
 
     # construct pool sample with poolsize of 1024
-    init_x = torch.zeros_like(targets).to(device)
-    #pool_grid = init_ntext.clone().repeat(POOL_SIZE, 1, 1)
+    #init_x = torch.zeros_like(targets).to(device)
+    init_x = torch.zeros((1, TEXT_LEN), dtype=torch.long).to(device)
+    pool_grid = init_x.repeat(POOL_SIZE,  1)
+    assert pool_grid.shape[-1] == targets.shape[-1]
 
     model = NCA_LLM(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(
         device
     )
-
-    logit, output = model(init_x)
-    loss = get_loss(logit, targets)
-    print(loss)
-    input()
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -179,6 +176,7 @@ def main():
     # LOGGING FILES for tensorboard
     log_path = Path("logs")
     pwd = Path().resolve()
+
     if platform.system() == "Darwin":
         run(["rm", "-r", "logs/"])
         Popen(
@@ -191,34 +189,35 @@ def main():
 
     log_path.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_path)
-
-    print("\n####################################################")
-    input("please check the parameters above and press enter...\n")
-
     try:
         for epoch in range(EPOCH_NUM):
-            batch_sample, pool_grid, loss = train_step(
-                model, optimizer, pool_grid, targets, TEXT_LEN, writer, epoch
-            )
+            batch_ids = torch.multinomial(
+                torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False
+            ).to(device)
+            batch_x = pool_grid[batch_ids]
+            
+            logit = None
+            for _ in range(np.random.randint(80, 96)):
+                logit, batch_x = model(batch_x)
 
-            epoch_sign = f"===== EPOCH {epoch} ====="
-            result = ""
-            for sample in batch_sample[:, 0, :]:
-                result_text = decode(torch.clamp(sample, 0, 1).squeeze().tolist())
-                result += result_text + "\n"
+            loss = get_loss(logit, targets)
+            loss_rank = loss.argsort().flip(dims=(0,))
+            avg_loss = loss.mean()
 
-            log_file.write(epoch_sign + "\n")
-            log_file.write(result)
+            batch_x = batch_x[loss_rank]
+            batch_ids = batch_ids[loss_rank]
+            batch_x[0] = init_x
+            pool_grid[batch_ids] = batch_x.detach()
 
-            if epoch % 1 == 0:
-                os.system("clear")
-                print("############## The Original Text is #################")
-                print(target_stext)
-                print("##############  The Inital Text is  #################")
-                print(init_stext)
-                print(epoch_sign)
-                print("loss: ", loss.item())
-                print(result)
+            print(f"epoch: {epoch}, loss: {avg_loss.item()}")
+            print(decode(batch_x[0].cpu().numpy()))
+
+
+            optimizer.zero_grad()
+            avg_loss.backward()
+            optimizer.step()
+
+            writer.add_scalar("train/loss", avg_loss, epoch)
 
             if epoch == 200 and platform.system() == "Darwin":
                 run(
@@ -229,21 +228,17 @@ def main():
                         "http://localhost:6006/?darkMode=true#timeseries",
                     ]
                 )
-
     except KeyboardInterrupt:
         pass
-
     finally:
-        log_file.close()
-        writer.close()
-
-        print(f"\nlog file saved to {log_file_path}...")
-        weigh_path = Path("data/weights")
-        weigh_path.mkdir(parents=True, exist_ok=True)
-        weight_path = Path(f"data/weights/{input_path.stem}.pt")
+        model.eval()
+        for _ in range(1000):
+            logit, init_x = model(init_x)
+        output = init_x
+        print("Final Output: ", decode(output[0].cpu().numpy()))
+        weight_path = Path(f"data/weights/new_{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
-
 
 if __name__ == "__main__":
     main()
