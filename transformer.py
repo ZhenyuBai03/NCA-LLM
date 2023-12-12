@@ -3,8 +3,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 # hyperparameters
-batch_size = 36 # how many independent sequences will we process in parallel?
-block_size = 18 # what is the maximum context length for predictions?
+batch_size = 8 # how many independent sequences will we process in parallel?
+block_size = 3 # what is the maximum context length for predictions?
 max_iters = 5000
 eval_interval = 500
 learning_rate = 3e-4

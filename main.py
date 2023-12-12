@@ -51,21 +51,6 @@ itos = { i:ch for i,ch in enumerate(chars) }
 encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
 decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
 
-def init_text(text_size, channel_size=CHANNEL_SIZE):
-    """
-    The first character and its hidden states іs assigned as 1, which corresponds to "."
-    The rest of characters are all zeros.
-
-    return:
-        init_ntext: pytorch.tensor with shape(1, channel_size, text_size)
-    """
-    init_ntext = torch.zeros((1, channel_size, text_size))
-    init_ntext[:, 1:, 0] = 1
-    return init_ntext
-
-
-
-
 ###### Model Construction #####
 class NCA_LLM(nn.Module):
     def __init__(self, channel_num, cell_survival_rate, device=device):
