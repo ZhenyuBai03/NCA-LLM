@@ -1,10 +1,6 @@
 import numpy as np
 from pathlib import Path
 
-import os
-from subprocess import Popen, run
-import platform
-
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -34,8 +30,8 @@ CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
-EPOCH_NUM = 1000
-input_path = Path("./data/input03.txt")
+EPOCH_NUM = 400
+input_path = Path("./data/input02.txt")
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
@@ -53,11 +49,9 @@ decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integ
 
 ###### Model Construction #####
 class NCA_LLM(nn.Module):
-    def __init__(self, channel_num, cell_survival_rate, device=device):
+    def __init__(self, device=device):
         super().__init__()
         self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
-        self.channel_num = channel_num
-        self.cell_survival_rate = cell_survival_rate
         self.device = device
 
         self.seq = nn.Sequential(
@@ -81,46 +75,13 @@ class NCA_LLM(nn.Module):
         with torch.no_grad():
             self.seq[2].weight.zero_()
 
-    # XXX: Live cell mask deleted, 
-    # stochastic update disabled
-    def stochastic_update(self, X):
-        mask = (torch.rand(X[:, :1, :].shape) <= self.cell_survival_rate).to(
-            self.device, torch.float32
-        )
-        return X * mask
-    
     def forward(self, X):
         emb_x = self.token_embedding_table(X) #(B, T, C)
         logits = self.seq(emb_x) #(B, T, C)
-        probs = F.softmax(logits, dim=-1) # (B, C)
+        probs = F.softmax(logits, dim=-1) # (B, T, C)
         return logits, probs.argmax(dim=-1)
 
 
-
-def train_step(model, optimizer, pool_grid, targets, text_length, writer, epoch):
-    batch_ids = torch.multinomial(
-        torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False
-    ).to(device)
-    batch_sample = pool_grid[batch_ids]
-    loss_rank = get_loss(batch_sample, targets).argsort().flip(dims=(0,))
-
-    batch_sample = batch_sample[loss_rank]
-    batch_ids = batch_ids[loss_rank]
-    batch_sample[0] = init_text(text_size=text_length)
-
-    for _ in range(np.random.randint(80, 96)):
-        batch_sample = model(batch_sample)
-
-    loss = get_loss(batch_sample, targets).mean()
-
-    pool_grid[batch_ids] = batch_sample.detach()
-
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-
-    writer.add_scalar("train/loss", loss, epoch)
-    return batch_sample, pool_grid, loss
 
 def get_loss(logits, targets):
     B, T, C = logits.shape
@@ -145,7 +106,7 @@ def main():
     pool_grid = init_x.repeat(POOL_SIZE,  1)
     assert pool_grid.shape[-1] == targets.shape[-1]
 
-    model = NCA_LLM(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(
+    model = NCA_LLM().to(
         device
     )
 
@@ -153,18 +114,6 @@ def main():
 
     # LOGGING FILES for tensorboard
     log_path = Path("logs")
-    pwd = Path().resolve()
-
-    macos_tb = None
-    if platform.system() == "Darwin":
-        run(["rm", "-r", "logs/"])
-        macos_tb = Popen(
-            [
-                "/usr/bin/osascript",
-                "-e",
-                f'tell app "Terminal" to do script "cd {pwd} &&  python3 -m tensorboard.main --logdir=logs"',
-            ]
-        )
 
     log_path.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_path)
@@ -198,38 +147,18 @@ def main():
 
             writer.add_scalar("train/loss", avg_loss, epoch)
 
-            if epoch == 200 and platform.system() == "Darwin":
-                run(
-                    [
-                        "open",
-                        "-a",
-                        "Safari",
-                        "http://localhost:6006/?darkMode=true#timeseries",
-                    ]
-                )
     except KeyboardInterrupt:
         pass
     finally:
         model.eval()
-        for _ in range(1000):
+        for _ in range(30):
             logit, init_x = model(init_x)
         output = init_x
-        print("Final Output: ", decode(output[0].cpu().numpy()))
+        print("\n=====Final Test=====\n", decode(output[0].cpu().numpy()))
         print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)
         weight_path = Path(f"data/weights/new_{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
-
-        if macos_tb is not None:
-            terminate = input("Terminate Tensorboard? (y/n): ")
-            if terminate.lower() == "y":
-                Popen(
-                    [
-                        "/usr/bin/osascript",
-                        "-e",
-                        'tell app "Terminal" to quit'
-                    ]
-                )
 
 if __name__ == "__main__":
     main()
