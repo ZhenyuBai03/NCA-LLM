@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -8,7 +9,6 @@ def get_device():
     device = "cpu"
     device = torch.device("mps") if torch.backends.mps.is_available() else "cpu"
     device = torch.device("cuda") if torch.cuda.is_available() else device
-    print(f"Using device: {device}")
     return device
 
 device = get_device()
@@ -98,15 +98,13 @@ def main():
 
     try:
         for epoch in range(EPOCH_NUM):
-            logit, batch_y = model(batch_x)
+            logit = None
+            for _ in range(np.random.randint(80, 96)):
+                logit, batch_x = model(batch_x)
 
             loss = get_loss(logit, targets) # loss of each batch
 
             print(f"epoch: {epoch}, loss: {loss.item()}")
-
-            for output in batch_y:
-                print(decode(output.cpu().numpy()))
-
 
             optimizer.zero_grad()
             loss.backward()
@@ -118,9 +116,11 @@ def main():
 
     finally:
         model.eval()
-        logit, init_x = model(init_x)
+
+        for _ in range(20):
+            logit, init_x = model(init_x)
         output = init_x
-        print("Final Output: ", decode(output[0].cpu().numpy()))
+        print("======Final Output======\n", decode(output[0].cpu().numpy()))
         print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)
         weight_path = Path(f"data/weights/new_{input_path.stem}.pt")
         torch.save(model.state_dict(), weight_path)

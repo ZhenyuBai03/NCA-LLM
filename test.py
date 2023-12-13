@@ -16,7 +16,7 @@ CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
 EPOCH_NUM = 8000
-input_path = Path("./data/input03.txt")
+input_path = Path("./data/input02.txt")
 weight_path = Path(f'./data/weights/new_{input_path.stem}.pt')
 
 file_path = str(input_path)
@@ -35,16 +35,15 @@ decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integ
 
 def main():
     device = ca.get_device()
+    print("Device: ", device)
     init_x = torch.zeros((1, TEXT_LEN), dtype=torch.long).to(device)
 
-    model = ca.NCA_LLM(channel_num=CHANNEL_SIZE, cell_survival_rate=CELL_SURVIVAL_RATE).to(device)
+    model = ca.NCA_LLM().to(device)
     model.load_state_dict(torch.load(weight_path))
     model.eval()
 
     with torch.no_grad():
-        for epoch in range(30):
-            print(f"epoch: {epoch}")
-            #print(decode(init_x[0].cpu().numpy()))
+        for _ in range(20):
             logit, init_x = model(init_x)
         output = init_x
 
