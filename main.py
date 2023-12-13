@@ -81,8 +81,6 @@ class NCA_LLM(nn.Module):
         probs = F.softmax(logits, dim=-1) # (B, T, C)
         return logits, probs.argmax(dim=-1)
 
-
-
 def get_loss(logits, targets):
     B, T, C = logits.shape
     logits_flat =  logits.reshape(B * T, C) # Now shape is (8*13, 10)
