@@ -14,12 +14,6 @@ def get_device():
     print(f"Using device: {device}")
     return device
 
-# NEED TO USE AN EMBEDDING LAYER
-# LOSS CROSS ENTROPY
-# SOFTMAX
-# return set of probabilities for each character for each character
-# bag of words model for next week
-
 device = get_device()
 
 DEBUG = False
@@ -143,7 +137,6 @@ def main():
 
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
             #print(decode(batch_x[0].cpu().numpy()))
-
 
             optimizer.zero_grad()
             avg_loss.backward()
