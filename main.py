@@ -30,7 +30,7 @@ CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
-EPOCH_NUM = 400
+EPOCH_NUM = 1000
 input_path = Path("./data/input02.txt")
 
 file_path = str(input_path)
@@ -79,7 +79,13 @@ class NCA_LLM(nn.Module):
         emb_x = self.token_embedding_table(X) #(B, T, C)
         logits = self.seq(emb_x) #(B, T, C)
         probs = F.softmax(logits, dim=-1) # (B, T, C)
-        return logits, probs.argmax(dim=-1)
+        
+        all_probs = probs.reshape(-1, CHAR_SIZE) # (B*T, C)
+        output = torch.multinomial(all_probs, 1) # (B*T, 1)
+        output = output.reshape(-1, TEXT_LEN)
+
+        #output = probs.argmax(dim=-1) # (B, T)
+        return logits, output
 
 
 def get_loss(logits, targets):
@@ -154,8 +160,7 @@ def main():
         print("Initial Text:\n", decode(init_x[0].cpu().numpy()))
         for _ in range(5):
             logit, init_x = model(init_x)
-            print(decode(init_x[0].cpu().numpy()))
-            print("")
+            print(decode(init_x[0].cpu().numpy()), "\n")
         output = init_x
         print("\n=====Final Test=====\n", decode(output[0].cpu().numpy()))
         print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)

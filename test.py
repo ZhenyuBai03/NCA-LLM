@@ -17,7 +17,7 @@ POOL_SIZE = 500
 LEARNING_RATE = 0.0001
 EPOCH_NUM = 8000
 input_path = Path("./data/input02.txt")
-weight_path = Path(f'./data/weights/new_{input_path.stem}.pt')
+weight_path = Path(f'./data/weights/{input_path.stem}.pt')
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
@@ -43,11 +43,12 @@ def main():
     model.eval()
 
     with torch.no_grad():
-        for _ in range(20):
+        for _ in range(8):
             logit, init_x = model(init_x)
+            print(decode(init_x[0].cpu().numpy()), "\n")
         output = init_x
 
-    print("Final Output: \n", decode(output[0].cpu().numpy()))
+    print("====Final Output====: \n", decode(output[0].cpu().numpy()))
 
     
 
