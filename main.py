@@ -99,7 +99,6 @@ def main():
     targets = torch.tensor(encode(text), dtype=torch.long)[None, ...].to(device)
     targets = targets.repeat(BATCH_SIZE, 1)
 
-
     # construct pool sample with poolsize of 1024
     #init_x = torch.zeros_like(targets).to(device)
     init_x = torch.zeros((1, TEXT_LEN), dtype=torch.long).to(device)
@@ -149,6 +148,7 @@ def main():
 
     except KeyboardInterrupt:
         pass
+
     finally:
         model.eval()
         print("\n=====Test=====\n")
