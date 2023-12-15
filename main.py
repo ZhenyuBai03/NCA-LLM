@@ -57,7 +57,7 @@ class NCA_LLM(nn.Module):
         self.seq = nn.Sequential(
             nn.Conv1d(
                 in_channels=TEXT_LEN,
-                out_channels=128,
+                out_channels= 128,
                 kernel_size=3,
                 padding=1,
             ),
@@ -81,6 +81,7 @@ class NCA_LLM(nn.Module):
         probs = F.softmax(logits, dim=-1) # (B, T, C)
         return logits, probs.argmax(dim=-1)
 
+
 def get_loss(logits, targets):
     B, T, C = logits.shape
     logits_flat =  logits.reshape(B * T, C) # Now shape is (8*13, 10)
@@ -97,7 +98,6 @@ def main():
     targets = torch.tensor(encode(text), dtype=torch.long)[None, ...].to(device)
     targets = targets.repeat(BATCH_SIZE, 1)
 
-
     # construct pool sample with poolsize of 1024
     #init_x = torch.zeros_like(targets).to(device)
     init_x = torch.zeros((1, TEXT_LEN), dtype=torch.long).to(device)
@@ -112,9 +112,9 @@ def main():
 
     # LOGGING FILES for tensorboard
     log_path = Path("logs")
-
     log_path.mkdir(parents=True, exist_ok=True)
     writer = SummaryWriter(log_path)
+
     try:
         for epoch in range(EPOCH_NUM):
             batch_ids = torch.multinomial(
@@ -147,14 +147,24 @@ def main():
 
     except KeyboardInterrupt:
         pass
+
     finally:
         model.eval()
-        for _ in range(30):
+        print("\n=====Test=====\n")
+        print("Initial Text:\n", decode(init_x[0].cpu().numpy()))
+        for _ in range(5):
             logit, init_x = model(init_x)
+            print(decode(init_x[0].cpu().numpy()))
+            print("")
         output = init_x
         print("\n=====Final Test=====\n", decode(output[0].cpu().numpy()))
         print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)
-        weight_path = Path(f"data/weights/new_{input_path.stem}.pt")
+
+        weight_dir = Path("data/weights")
+        weight_dir.mkdir(parents=True, exist_ok=True)
+
+        weight_path = weight_dir / f"{input_path.stem}.pt"
+
         torch.save(model.state_dict(), weight_path)
         print("\nSaved model to\n\n", weight_path)
 
