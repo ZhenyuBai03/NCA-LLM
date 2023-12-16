@@ -25,6 +25,8 @@ CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
 LEARNING_RATE = 0.0001
 EPOCH_NUM = 1000
+EMBD_SIZE = 128
+
 input_path = Path("./data/input02.txt")
 
 file_path = str(input_path)
@@ -45,8 +47,9 @@ decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integ
 class NCA_LLM(nn.Module):
     def __init__(self, device=device):
         super().__init__()
-        self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
         self.device = device
+
+        self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
 
         self.seq = nn.Sequential(
             nn.Conv1d(
@@ -64,6 +67,7 @@ class NCA_LLM(nn.Module):
                 bias=False
             ),
         )
+
 
         # initialize weights to zero to prevent random noise
         with torch.no_grad():
