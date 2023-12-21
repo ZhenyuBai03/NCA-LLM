@@ -68,7 +68,6 @@ class NCA_LLM(nn.Module):
             ),
         )
 
-
         # initialize weights to zero to prevent random noise
         with torch.no_grad():
             self.seq[2].weight.zero_()
@@ -84,7 +83,6 @@ class NCA_LLM(nn.Module):
 
         #output = probs.argmax(dim=-1) # (B, T)
         return logits, output
-
 
 def get_loss(logits, targets):
     B, T, C = logits.shape
