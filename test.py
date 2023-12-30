@@ -43,7 +43,7 @@ def main():
     model.eval()
 
     with torch.no_grad():
-        for i in range(8):
+        for i in range(100):
             print(f"===== Step {i} =====")
             print(decode(init_x[0].cpu().numpy()), "\n")
             logit, init_x = model(init_x)

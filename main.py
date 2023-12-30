@@ -23,7 +23,7 @@ BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
 POOL_SIZE = 500
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.001
 EPOCH_NUM = 1000
 EMBD_SIZE = 128
 
@@ -51,19 +51,18 @@ class NCA_LLM(nn.Module):
 
         self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
 
+        self.filter = nn.Conv1d(in_channels = TEXT_LEN, out_channels = TEXT_LEN * 3, kernel_size = 3, padding=1, groups=TEXT_LEN)
         self.seq = nn.Sequential(
             nn.Conv1d(
-                in_channels=TEXT_LEN,
+                in_channels=TEXT_LEN * 3,
                 out_channels= 128,
-                kernel_size=3,
-                padding=1,
+                kernel_size=1,
             ),
             nn.ReLU(),
             nn.Conv1d(
                 in_channels=128,
                 out_channels=TEXT_LEN,
-                kernel_size=3,
-                padding=1,
+                kernel_size=1,
                 bias=False
             ),
         )
@@ -74,14 +73,18 @@ class NCA_LLM(nn.Module):
 
     def forward(self, X):
         emb_x = self.token_embedding_table(X) #(B, T, C)
-        logits = self.seq(emb_x) #(B, T, C)
+        filtered_emb = self.filter(emb_x)
+        logits = self.seq(filtered_emb) #(B, T, C)
         probs = F.softmax(logits, dim=-1) # (B, T, C)
-        
+
         all_probs = probs.reshape(-1, CHAR_SIZE) # (B*T, C)
         output = torch.multinomial(all_probs, 1) # (B*T, 1)
         output = output.reshape(-1, TEXT_LEN)
 
-        #output = probs.argmax(dim=-1) # (B, T)
+        live_mask = torch.max(probs, dim=-1).values > 0.9
+        assert live_mask.shape == output.shape
+        output = output * live_mask
+
         return logits, output
 
 def get_loss(logits, targets):
@@ -101,7 +104,6 @@ def main():
     targets = targets.repeat(BATCH_SIZE, 1)
 
     # construct pool sample with poolsize of 1024
-    #init_x = torch.zeros_like(targets).to(device)
     init_x = torch.zeros((1, TEXT_LEN), dtype=torch.long).to(device)
     pool_grid = init_x.repeat(POOL_SIZE,  1)
     assert pool_grid.shape[-1] == targets.shape[-1]
@@ -125,7 +127,7 @@ def main():
             batch_x = pool_grid[batch_ids]
             
             logit = None
-            for _ in range(np.random.randint(80, 96)):
+            for _ in range(np.random.randint(10, 26)):
                 logit, batch_x = model(batch_x)
 
             loss = get_loss(logit, targets)
@@ -138,7 +140,7 @@ def main():
             pool_grid[batch_ids] = batch_x.detach()
 
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
-            #print(decode(batch_x[0].cpu().numpy()))
+            print(decode(batch_x[-1].cpu().numpy()), "\n")
 
             optimizer.zero_grad()
             avg_loss.backward()
@@ -153,11 +155,11 @@ def main():
         model.eval()
         print("\n=====Test=====\n")
         print("Initial Text:\n", decode(init_x[0].cpu().numpy()))
-        for _ in range(5):
+        for _ in range(30):
             logit, init_x = model(init_x)
             print(decode(init_x[0].cpu().numpy()), "\n")
         output = init_x
-        print("\n=====Final Test=====\n", decode(output[0].cpu().numpy()))
+        print("\n=====Final Result=====\n", decode(output[0].cpu().numpy()))
         print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)
 
         weight_dir = Path("data/weights")
