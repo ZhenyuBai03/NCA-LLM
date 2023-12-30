@@ -38,10 +38,22 @@ TEXT_LEN= len(text)
 chars = sorted(list(set(text)))
 CHAR_SIZE = len(chars)
 
+vocab_text = text.split(" ")
+VOCAB_LEN = len(vocab_text)
+vocab = set(vocab_text)
+VOCAB_SIZE = len(vocab)
+print(vocab)
+
 stoi = { ch:i for i,ch in enumerate(chars) }
 itos = { i:ch for i,ch in enumerate(chars) }
 encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
 decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
+
+word_to_ix = {word: i for i, word in enumerate(vocab)}
+ix_to_word = {i: word for i, word in enumerate(vocab)}
+encode_word = lambda s: [word_to_ix[c] for c in s] # encoder: take a string, output a list of integers
+decode_word = lambda l: ' '.join([ix_to_word[i] for i in l]) # decoder: take a list of integers, output a string
+
 
 ###### Model Construction #####
 class NCA_LLM(nn.Module):
@@ -49,19 +61,24 @@ class NCA_LLM(nn.Module):
         super().__init__()
         self.device = device
 
-        self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
+        self.token_embedding_table = nn.Embedding(VOCAB_SIZE, VOCAB_SIZE)
 
-        self.filter = nn.Conv1d(in_channels = CHAR_SIZE, out_channels = CHAR_SIZE * 3, kernel_size = 3, padding=1, groups=CHAR_SIZE)
+        self.filter = nn.Conv1d(in_channels = VOCAB_LEN,
+                                out_channels = VOCAB_LEN * 3,
+                                kernel_size = 3,
+                                padding=1,
+                                groups=VOCAB_LEN,)
+
         self.seq = nn.Sequential(
             nn.Conv1d(
-                in_channels=CHAR_SIZE * 3,
+                in_channels=VOCAB_LEN * 3,
                 out_channels= 128,
                 kernel_size=1,
             ),
             nn.ReLU(),
             nn.Conv1d(
                 in_channels=128,
-                out_channels=CHAR_SIZE,
+                out_channels=VOCAB_LEN,
                 kernel_size=1,
                 bias=False
             ),
@@ -72,14 +89,15 @@ class NCA_LLM(nn.Module):
             self.seq[2].weight.zero_()
 
     def forward(self, X):
-        emb_x = self.token_embedding_table(X).permute(0, 2, 1) #(B, C, T)
+        emb_x = self.token_embedding_table(X) #(B, T, C)
         filtered_emb = self.filter(emb_x)
-        logits = self.seq(filtered_emb).permute(0, 2, 1) #(B, T, C)
+        logits = self.seq(filtered_emb) #(B, T, C)
+
         probs = F.softmax(logits, dim=-1) # (B, T, C)
 
-        all_probs = probs.reshape(-1, CHAR_SIZE) # (B*T, C)
+        all_probs = probs.reshape(-1, VOCAB_SIZE) # (B*T, C)
         output = torch.multinomial(all_probs, 1) # (B*T, 1)
-        output = output.reshape(-1, TEXT_LEN)
+        output = output.reshape(-1, VOCAB_LEN)
 
         live_mask = torch.max(probs, dim=-1).values > 0.9
         assert live_mask.shape == output.shape
@@ -103,8 +121,17 @@ def main():
     targets = torch.tensor(encode(text), dtype=torch.long)[None, ...].to(device)
     targets = targets.repeat(BATCH_SIZE, 1)
 
+    targets = torch.tensor(encode_word(vocab_text), dtype=torch.long)[None, ...].to(device)
+    targets = targets.repeat(BATCH_SIZE, 1)
+
+    print("Target: ", targets.shape)
+    print("Types of vocab: ", VOCAB_SIZE)
+    print("Total word count: ", VOCAB_LEN)
+    print(targets[0])
+    input()
+
     # construct pool sample with poolsize of 1024
-    init_x = torch.zeros((1, TEXT_LEN), dtype=torch.long).to(device)
+    init_x = torch.zeros((1, VOCAB_LEN), dtype=torch.long).to(device)
     pool_grid = init_x.repeat(POOL_SIZE,  1)
     assert pool_grid.shape[-1] == targets.shape[-1]
 
@@ -140,7 +167,7 @@ def main():
             pool_grid[batch_ids] = batch_x.detach()
 
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
-            print(decode(batch_x[-1].cpu().numpy()), "\n")
+            print(decode_word(batch_x[-1].cpu().numpy()), "\n")
 
             optimizer.zero_grad()
             avg_loss.backward()
@@ -154,12 +181,12 @@ def main():
     finally:
         model.eval()
         print("\n=====Test=====\n")
-        print("Initial Text:\n", decode(init_x[0].cpu().numpy()))
+        print("Initial Text:\n", decode_word(init_x[0].cpu().numpy()))
         for _ in range(30):
             logit, init_x = model(init_x)
-            print(decode(init_x[0].cpu().numpy()), "\n")
+            print(decode_word(init_x[0].cpu().numpy()), "\n")
         output = init_x
-        print("\n=====Final Result=====\n", decode(output[0].cpu().numpy()))
+        print("\n=====Final Result=====\n", decode_word(output[0].cpu().numpy()))
         print("# of chars: ",TEXT_LEN, "\n# of unique chars: ", CHAR_SIZE)
 
         weight_dir = Path("data/weights")

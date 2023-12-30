@@ -66,6 +66,8 @@ if __name__ == '__main__':
             context_var = make_context_vector(context, word_to_ix)
             net.zero_grad()
             log_probs = net(context_var)
+            print(vocab_size)
+            print(log_probs)
 
             loss = loss_func(log_probs.view(1,-1), autograd.Variable(
                 torch.LongTensor([word_to_ix[target]])
