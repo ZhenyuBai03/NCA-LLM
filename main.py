@@ -102,11 +102,11 @@ class NCA_LLM(nn.Module):
 
 def get_loss(logits, targets):
     B, T, C = logits.shape
-    logits_flat =  logits.reshape(B * T, C) # Now shape is (8*13, 10)
-    targets_flat = targets.reshape(B * T)  # Now shape is (8*13)
+    logits_flat =  logits.reshape(B * T, C)
+    targets_flat = targets.reshape(B * T)  
     # Calculate the loss
     loss = F.cross_entropy(logits_flat, targets_flat, reduction='none') 
-    # Reshape the loss back to the batch shape (8, 13)
+
     loss = loss.reshape(B, T)
     loss = loss.mean(dim=-1)
     return loss
