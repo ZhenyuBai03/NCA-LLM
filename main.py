@@ -44,11 +44,6 @@ vocab = set(vocab_text)
 VOCAB_SIZE = len(vocab)
 print(vocab)
 
-stoi = { ch:i for i,ch in enumerate(chars) }
-itos = { i:ch for i,ch in enumerate(chars) }
-encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
-decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
-
 word_to_ix = {word: i for i, word in enumerate(vocab)}
 ix_to_word = {i: word for i, word in enumerate(vocab)}
 encode_word = lambda s: [word_to_ix[c] for c in s] # encoder: take a string, output a list of integers
@@ -118,9 +113,6 @@ def get_loss(logits, targets):
 
 def main():
     # Construct target
-    targets = torch.tensor(encode(text), dtype=torch.long)[None, ...].to(device)
-    targets = targets.repeat(BATCH_SIZE, 1)
-
     targets = torch.tensor(encode_word(vocab_text), dtype=torch.long)[None, ...].to(device)
     targets = targets.repeat(BATCH_SIZE, 1)
 
