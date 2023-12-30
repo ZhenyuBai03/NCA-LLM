@@ -51,17 +51,17 @@ class NCA_LLM(nn.Module):
 
         self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
 
-        self.filter = nn.Conv1d(in_channels = TEXT_LEN, out_channels = TEXT_LEN * 3, kernel_size = 3, padding=1, groups=TEXT_LEN)
+        self.filter = nn.Conv1d(in_channels = CHAR_SIZE, out_channels = CHAR_SIZE * 3, kernel_size = 3, padding=1, groups=CHAR_SIZE)
         self.seq = nn.Sequential(
             nn.Conv1d(
-                in_channels=TEXT_LEN * 3,
+                in_channels=CHAR_SIZE * 3,
                 out_channels= 128,
                 kernel_size=1,
             ),
             nn.ReLU(),
             nn.Conv1d(
                 in_channels=128,
-                out_channels=TEXT_LEN,
+                out_channels=CHAR_SIZE,
                 kernel_size=1,
                 bias=False
             ),
@@ -72,9 +72,9 @@ class NCA_LLM(nn.Module):
             self.seq[2].weight.zero_()
 
     def forward(self, X):
-        emb_x = self.token_embedding_table(X) #(B, T, C)
+        emb_x = self.token_embedding_table(X).permute(0, 2, 1) #(B, C, T)
         filtered_emb = self.filter(emb_x)
-        logits = self.seq(filtered_emb) #(B, T, C)
+        logits = self.seq(filtered_emb).permute(0, 2, 1) #(B, T, C)
         probs = F.softmax(logits, dim=-1) # (B, T, C)
 
         all_probs = probs.reshape(-1, CHAR_SIZE) # (B*T, C)
