@@ -119,7 +119,6 @@ def main():
     print("Target: ", targets.shape)
     print("Types of vocab: ", VOCAB_SIZE)
     print("Total word count: ", VOCAB_LEN)
-    print(targets[0])
     input()
 
     # construct pool sample with poolsize of 1024
