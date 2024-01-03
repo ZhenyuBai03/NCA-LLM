@@ -11,3 +11,8 @@
     - implement embedding table on the model
     - use con1d to learn neighbors' logit
   - simplified transformer model tested
+ 
+* 2024.01.03
+  - added a group convolution layer acts as filter
+  - created word level and character level embedding at two branches respectively
+  - [Overleaf Link](https://www.overleaf.com/project/65824d2027c1cfc95ee60a6d)
