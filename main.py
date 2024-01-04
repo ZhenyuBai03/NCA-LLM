@@ -22,7 +22,7 @@ DEBUG = False
 BATCH_SIZE = 8
 CHANNEL_SIZE = 16
 CELL_SURVIVAL_RATE = 0.5
-POOL_SIZE = 500
+POOL_SIZE = 1024
 LEARNING_RATE = 0.001
 EPOCH_NUM = 1000
 EMBD_SIZE = 128
@@ -71,18 +71,25 @@ class NCA_LLM(nn.Module):
         with torch.no_grad():
             self.seq[2].weight.zero_()
 
+    def output_generate(self, probs):
+        all_probs = probs.reshape(-1, CHAR_SIZE) # (B*T, C)
+        output = torch.multinomial(all_probs, 1) # (B*T, 1)
+        output = output.reshape(-1, TEXT_LEN)
+        return output
+
+    def live_mask(self, probs):
+        live_mask = torch.max(probs, dim=-1).values > 0.9
+        return live_mask 
+
     def forward(self, X):
         emb_x = self.token_embedding_table(X) #(B, T, C)
         filtered_emb = self.filter(emb_x)
         logits = self.seq(filtered_emb) #(B, T, C)
         probs = F.softmax(logits, dim=-1) # (B, T, C)
 
-        all_probs = probs.reshape(-1, CHAR_SIZE) # (B*T, C)
-        output = torch.multinomial(all_probs, 1) # (B*T, 1)
-        output = output.reshape(-1, TEXT_LEN)
+        output = self.output_generate(probs)
 
-        live_mask = torch.max(probs, dim=-1).values > 0.9
-        assert live_mask.shape == output.shape
+        live_mask = self.live_mask(probs)
         output = output * live_mask
 
         return logits, output
@@ -154,7 +161,7 @@ def main():
     finally:
         model.eval()
         print("\n=====Test=====\n")
-        print("Initial Text:\n", decode(init_x[0].cpu().numpy()))
+        print(decode(init_x[0].cpu().numpy()), "\n")
         for _ in range(30):
             logit, init_x = model(init_x)
             print(decode(init_x[0].cpu().numpy()), "\n")
