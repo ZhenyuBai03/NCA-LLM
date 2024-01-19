@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 from pathlib import Path
 
@@ -27,11 +29,13 @@ LEARNING_RATE = 0.001
 EPOCH_NUM = 1000
 EMBD_SIZE = 128
 
-input_path = Path("./data/input02.txt")
+input_path = Path("./data/input03.txt")
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
     text = input_text.read()
+
+text = text.replace("\n", "\\n")
 
 TEXT_LEN= len(text)
 
@@ -51,12 +55,17 @@ class NCA_LLM(nn.Module):
 
         self.token_embedding_table = nn.Embedding(CHAR_SIZE, CHAR_SIZE)
 
-        self.filter = nn.Conv1d(in_channels = TEXT_LEN, out_channels = TEXT_LEN * 3, kernel_size = 3, padding=1, groups=TEXT_LEN)
+        self.filter = nn.Conv1d(in_channels = TEXT_LEN,
+                                out_channels = TEXT_LEN,
+                                kernel_size = 3,
+                                padding = 1,
+                                groups = TEXT_LEN)
+
         self.seq = nn.Sequential(
             nn.Conv1d(
-                in_channels=TEXT_LEN * 3,
-                out_channels= 128,
-                kernel_size=1,
+                in_channels = TEXT_LEN,
+                out_channels = 128,
+                kernel_size = 1,
             ),
             nn.ReLU(),
             nn.Conv1d(
@@ -132,7 +141,7 @@ def main():
                 torch.ones(POOL_SIZE), BATCH_SIZE, replacement=False
             ).to(device)
             batch_x = pool_grid[batch_ids]
-            
+
             logit = None
             for _ in range(np.random.randint(10, 26)):
                 logit, batch_x = model(batch_x)
@@ -146,6 +155,7 @@ def main():
             batch_x[0] = init_x
             pool_grid[batch_ids] = batch_x.detach()
 
+            os.system('cls' if os.name == 'nt' else 'clear')
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
             print(decode(batch_x[-1].cpu().numpy()), "\n")
 
@@ -179,3 +189,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
