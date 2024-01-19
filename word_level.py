@@ -1,8 +1,4 @@
 import os
-<<<<<<<< HEAD:char_level.py
-
-========
->>>>>>>> word_filter:word_level.py
 import numpy as np
 from pathlib import Path
 
@@ -32,7 +28,7 @@ LEARNING_RATE = 0.001
 EPOCH_NUM = 1000
 EMBD_SIZE = 128
 
-input_path = Path("./data/shakespeare02.txt")
+input_path = Path("./data/input02.txt")
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
@@ -71,25 +67,11 @@ class NCA_LLM(nn.Module):
                                 padding=1,
                                 groups=VOCAB_LEN,)
 
-<<<<<<<< HEAD:char_level.py
-        self.filter = nn.Conv1d(in_channels = TEXT_LEN,
-                                out_channels = TEXT_LEN,
-                                kernel_size = 3,
-                                padding = 1,
-                                groups = TEXT_LEN)
-
-        self.seq = nn.Sequential(
-            nn.Conv1d(
-                in_channels = TEXT_LEN,
-                out_channels = 128,
-                kernel_size = 1,
-========
         self.seq = nn.Sequential(
             nn.Conv1d(
                 in_channels=VOCAB_LEN * 3,
                 out_channels= 128,
                 kernel_size=1,
->>>>>>>> word_filter:word_level.py
             ),
             nn.ReLU(),
             nn.Conv1d(
@@ -121,13 +103,9 @@ class NCA_LLM(nn.Module):
 
         probs = F.softmax(logits, dim=-1) # (B, T, C)
 
-<<<<<<<< HEAD:char_level.py
-        output = self.output_generate(probs)
-========
         all_probs = probs.reshape(-1, VOCAB_SIZE) # (B*T, C)
         output = torch.multinomial(all_probs, 1) # (B*T, 1)
         output = output.reshape(-1, VOCAB_LEN)
->>>>>>>> word_filter:word_level.py
 
         live_mask = self.live_mask(probs)
         output = output * live_mask
@@ -207,11 +185,6 @@ def main():
     finally:
         model.eval()
         print("\n=====Test=====\n")
-<<<<<<<< HEAD:char_level.py
-        print(decode(init_x[0].cpu().numpy()), "\n")
-========
-        print("Initial Text:\n", decode_word(init_x[0].cpu().numpy()))
->>>>>>>> word_filter:word_level.py
         for _ in range(30):
             logit, init_x = model(init_x)
             print(decode_word(init_x[0].cpu().numpy()), "\n")

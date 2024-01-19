@@ -29,7 +29,7 @@ LEARNING_RATE = 0.001
 EPOCH_NUM = 1000
 EMBD_SIZE = 128
 
-input_path = Path("./data/shakespeare02.txt")
+input_path = Path("./data/input02.txt")
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
