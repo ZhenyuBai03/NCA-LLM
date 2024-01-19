@@ -29,13 +29,13 @@ LEARNING_RATE = 0.001
 EPOCH_NUM = 1000
 EMBD_SIZE = 128
 
-input_path = Path("./data/input03.txt")
+input_path = Path("./data/shakespeare02.txt")
 
 file_path = str(input_path)
 with open(file_path, "r", encoding="utf-8") as input_text:
     text = input_text.read()
 
-text = text.replace("\n", "\\n")
+#text = text.replace("\n", "\\n")
 
 TEXT_LEN= len(text)
 
