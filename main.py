@@ -119,7 +119,7 @@ def main():
     print("Target: ", targets.shape)
     print("Types of vocab: ", VOCAB_SIZE)
     print("Total word count: ", VOCAB_LEN)
-    input()
+    input("press enter to continue: ")
 
     # construct pool sample with poolsize of 1024
     init_x = torch.zeros((1, VOCAB_LEN), dtype=torch.long).to(device)
@@ -156,6 +156,7 @@ def main():
             batch_ids = batch_ids[loss_rank]
             batch_x[0] = init_x
             pool_grid[batch_ids] = batch_x.detach()
+
 
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
             print(decode_word(batch_x[-1].cpu().numpy()), "\n")
