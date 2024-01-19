@@ -7,3 +7,5 @@ To run the code:
 ```bash
 python3 word_level.py
 ```
+
+The available data files can be found in data/ directory. 
