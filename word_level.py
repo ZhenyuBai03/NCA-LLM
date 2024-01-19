@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from pathlib import Path
 
@@ -157,7 +158,7 @@ def main():
             batch_x[0] = init_x
             pool_grid[batch_ids] = batch_x.detach()
 
-
+            os.system('cls' if os.name == 'nt' else 'clear')
             print(f"epoch: {epoch}, loss: {avg_loss.item()}")
             print(decode_word(batch_x[-1].cpu().numpy()), "\n")
 
