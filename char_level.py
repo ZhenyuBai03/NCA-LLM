@@ -6,7 +6,6 @@ from pathlib import Path
 import torch
 from torch import nn
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
 
 
 def get_device():
@@ -130,10 +129,6 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    # LOGGING FILES for tensorboard
-    log_path = Path("logs")
-    log_path.mkdir(parents=True, exist_ok=True)
-    writer = SummaryWriter(log_path)
 
     try:
         for epoch in range(EPOCH_NUM):
@@ -163,7 +158,6 @@ def main():
             avg_loss.backward()
             optimizer.step()
 
-            writer.add_scalar("train/loss", avg_loss, epoch)
 
     except KeyboardInterrupt:
         pass
